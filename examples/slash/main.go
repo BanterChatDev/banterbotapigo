@@ -10,7 +10,7 @@ import (
 	banter "github.com/BanterChatDev/banterbotapigo"
 )
 
-const token = "bt_16a87725c907.2a25cbf2e8b3acc1e18ba502e84f83f9"
+const token = "REPLACE_ME"
 
 func main() {
 	if token == "REPLACE_ME" {

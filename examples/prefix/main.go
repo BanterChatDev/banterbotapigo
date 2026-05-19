@@ -21,7 +21,6 @@ func main() {
 	bot := banter.NewBot(banter.BotOpts{
 		Intents:       banter.IntentsDefault() | banter.IntentMessageContent,
 		CommandPrefix: "!",
-		HelpEnabled:   true,
 	})
 
 	bot.PrefixCommand("ping", "Reply with pong and current time", "Info",

@@ -19,9 +19,24 @@ type BotOpts struct {
 	Reconnect       bool
 	CommandPrefix   string
 	ApplicationID   string
-	HelpEnabled     bool
+	HelpCommand     *HelpCommand
 	HelpColor       int
 	Debug           bool
+}
+
+type HelpCommand struct {
+	disabled bool
+	handler  PrefixHandler
+}
+
+var NoHelpCommand = &HelpCommand{disabled: true}
+
+func DefaultHelpCommand() *HelpCommand {
+	return &HelpCommand{}
+}
+
+func CustomHelpCommand(handler PrefixHandler) *HelpCommand {
+	return &HelpCommand{handler: handler}
 }
 
 type MessageHandler func(ctx context.Context, m *Message)
@@ -42,7 +57,6 @@ type Bot struct {
 	reconnect     bool
 	commandPrefix string
 	applicationID string
-	helpEnabled   bool
 	helpColor     int
 
 	User      *User
@@ -107,7 +121,6 @@ func NewBot(opts BotOpts) *Bot {
 		reconnect:      opts.Reconnect,
 		commandPrefix:  opts.CommandPrefix,
 		applicationID:  opts.ApplicationID,
-		helpEnabled:    opts.HelpEnabled,
 		helpColor:      opts.HelpColor,
 		Guilds:         map[string]*Guild{},
 		prefixCommands: map[string]*prefixCommand{},
@@ -124,7 +137,13 @@ func NewBot(opts BotOpts) *Bot {
 	} else {
 		b.reconnect = true
 	}
-	if opts.HelpEnabled {
+	switch {
+	case opts.HelpCommand == nil:
+		registerHelp(b)
+	case opts.HelpCommand.disabled:
+	case opts.HelpCommand.handler != nil:
+		b.PrefixCommand("help", "Lists all commands.", "Info", opts.HelpCommand.handler)
+	default:
 		registerHelp(b)
 	}
 	return b
@@ -186,6 +205,16 @@ func (b *Bot) OnError(h ErrorHandler) {
 
 func (b *Bot) PrefixCommand(name, help, category string, handler PrefixHandler, aliases ...string) {
 	b.mu.Lock()
+	if _, exists := b.prefixCommands[name]; exists {
+		b.mu.Unlock()
+		botLog.Panic(MsgDupPrefixCommand, name)
+	}
+	for _, a := range aliases {
+		if _, exists := b.prefixAliases[a]; exists {
+			b.mu.Unlock()
+			botLog.Panic(MsgDupPrefixCommand, a)
+		}
+	}
 	defer b.mu.Unlock()
 	cmd := &prefixCommand{
 		Name:     name,

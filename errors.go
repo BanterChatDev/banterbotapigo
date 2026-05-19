@@ -7,6 +7,7 @@ import (
 
 const (
 	MsgDupSlashCommand    = "duplicate slash command %q — fix your command loader and restart"
+	MsgDupPrefixCommand   = "duplicate prefix command %q — fix your command loader and restart"
 	MsgDupButtonHandler   = "duplicate button handler %q — fix your loader and restart"
 	MsgEmptyButtonID      = "OnButton: custom_id must be non-empty"
 	MsgCommandSyncDup     = "command sync rejected by server: duplicate name %q in registration payload. The server did NOT modify your previously-registered commands. Check your command loader for a duplicate entry, or rename one of the commands."
