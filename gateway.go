@@ -23,7 +23,7 @@ const (
 	closeInvalidSeq = 4007
 )
 
-var gatewayLog = newLogger("gateway")
+var gatewayLog = NewLogger(loggerPrefix + "gateway")
 
 type gatewayFrame struct {
 	Op   int             `json:"op"`

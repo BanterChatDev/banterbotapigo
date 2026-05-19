@@ -71,10 +71,10 @@ type Context struct {
 }
 
 func (c *Context) Reply(ctx context.Context, content string) error {
-	if c.Bot == nil || c.Bot.http == nil {
+	if c.Bot == nil || c.Bot.HTTP == nil {
 		return ErrContextDetached
 	}
-	_, err := c.Bot.http.SendMessage(ctx, c.Message.ChannelID, SendMessageBody{
+	_, err := c.Bot.HTTP.SendMessage(ctx, c.Message.ChannelID, SendMessageBody{
 		Content: content,
 		ReplyTo: c.Message.ID,
 	})
@@ -82,7 +82,7 @@ func (c *Context) Reply(ctx context.Context, content string) error {
 }
 
 func (c *Context) ReplyEmbed(ctx context.Context, embed *Embed) error {
-	if c.Bot == nil || c.Bot.http == nil {
+	if c.Bot == nil || c.Bot.HTTP == nil {
 		return ErrContextDetached
 	}
 	body := SendMessageBody{
@@ -95,7 +95,7 @@ func (c *Context) ReplyEmbed(ctx context.Context, embed *Embed) error {
 			body.Components = comps
 		}
 	}
-	_, err := c.Bot.http.SendMessage(ctx, c.Message.ChannelID, body)
+	_, err := c.Bot.HTTP.SendMessage(ctx, c.Message.ChannelID, body)
 	return err
 }
 

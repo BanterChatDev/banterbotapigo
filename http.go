@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-var httpLog = newLogger("http")
+var httpLog = NewLogger(loggerPrefix + "http")
 
 func userAgent() string { return "BanterPy-Go/" + Version + " (+https://banterchat.org)" }
 

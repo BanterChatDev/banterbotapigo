@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var pagLog = newLogger("pagination")
+var pagLog = NewLogger(loggerPrefix + "pagination")
 
 type BuildEmbedFn func(items []any, page, total int) *Embed
 type FetchFn func() []any

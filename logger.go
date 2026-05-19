@@ -82,10 +82,10 @@ type Logger struct {
 	name string
 }
 
-func newLogger(name string) *Logger {
+func NewLogger(name string) *Logger {
 	initRoot()
-	if !strings.HasPrefix(name, "banterapi") {
-		name = "banterapi." + name
+	if name == "" {
+		name = "user"
 	}
 	return &Logger{name: name}
 }
