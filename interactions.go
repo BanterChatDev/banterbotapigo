@@ -3,7 +3,6 @@ package banter
 import (
 	"context"
 	"encoding/json"
-	"errors"
 )
 
 type Interaction struct {
@@ -131,10 +130,10 @@ func mergeComponents(embed *Embed, components []map[string]any) []map[string]any
 
 func (i *Interaction) Respond(ctx context.Context, content string, opts RespondOpts) error {
 	if i.client == nil {
-		return errors.New("interaction has no attached client")
+		return ErrInteractionDetached
 	}
 	if content == "" && opts.Embed == nil {
-		return errors.New("respond requires non-empty content or an embed")
+		return ErrRespondEmpty
 	}
 	if i.responded {
 		return i.Followup(ctx, content, opts)
@@ -159,10 +158,10 @@ func (i *Interaction) Respond(ctx context.Context, content string, opts RespondO
 
 func (i *Interaction) Defer(ctx context.Context, ephemeral bool) error {
 	if i.client == nil {
-		return errors.New("interaction has no attached client")
+		return ErrInteractionDetached
 	}
 	if i.responded {
-		return errors.New("interaction already responded to")
+		return ErrInteractionResponded
 	}
 	body := map[string]any{
 		"kind":      "defer",
@@ -177,10 +176,10 @@ func (i *Interaction) Defer(ctx context.Context, ephemeral bool) error {
 
 func (i *Interaction) Followup(ctx context.Context, content string, opts RespondOpts) error {
 	if i.client == nil {
-		return errors.New("interaction has no attached client")
+		return ErrInteractionDetached
 	}
 	if content == "" && opts.Embed == nil {
-		return errors.New("followup requires non-empty content or an embed")
+		return ErrFollowupEmpty
 	}
 	body := map[string]any{
 		"kind":      "followup",
@@ -201,13 +200,13 @@ func (i *Interaction) Followup(ctx context.Context, content string, opts Respond
 
 func (i *Interaction) Update(ctx context.Context, content string, opts RespondOpts) error {
 	if i.Type != "button" {
-		return errors.New("update is only valid for button interactions — use Respond or Followup for slash commands")
+		return ErrUpdateNotButton
 	}
 	if i.responded {
-		return errors.New("interaction already responded to")
+		return ErrInteractionResponded
 	}
 	if i.client == nil {
-		return errors.New("interaction has no attached client")
+		return ErrInteractionDetached
 	}
 	body := map[string]any{
 		"kind":    "update",
@@ -228,7 +227,7 @@ func (i *Interaction) Update(ctx context.Context, content string, opts RespondOp
 
 func (i *Interaction) dispatch(ctx context.Context, body map[string]any) error {
 	if i.client == nil || i.client.http == nil {
-		return errors.New("interaction has no attached HTTP client")
+		return ErrInteractionHTTPMissing
 	}
 	return i.client.http.RespondInteraction(ctx, i.ID, i.Token, body)
 }

@@ -22,7 +22,7 @@ func NewFileFromPath(path string) (*File, error) {
 
 func NewFileFromBytes(data []byte, filename string) (*File, error) {
 	if filename == "" {
-		return nil, fmt.Errorf("NewFileFromBytes requires filename")
+		return nil, ErrFileNeedsFilename
 	}
 	buf := make([]byte, len(data))
 	copy(buf, data)
@@ -31,7 +31,7 @@ func NewFileFromBytes(data []byte, filename string) (*File, error) {
 
 func NewFileFromReader(r io.Reader, filename string) (*File, error) {
 	if filename == "" {
-		return nil, fmt.Errorf("NewFileFromReader requires filename")
+		return nil, ErrFileNeedsFilename
 	}
 	data, err := io.ReadAll(r)
 	if err != nil {

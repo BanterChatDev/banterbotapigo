@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -129,7 +128,7 @@ func (h *HTTPClient) Request(ctx context.Context, method, path string, body any,
 		}
 		return nil, newHTTPException(resp.StatusCode, code, message, method, path)
 	}
-	return nil, errors.New("http: exhausted retries without returning")
+	return nil, ErrHTTPRetriesExhausted
 }
 
 func parseErrorBody(body []byte) (int, string) {
@@ -507,5 +506,5 @@ func (h *HTTPClient) UploadAttachment(ctx context.Context, channelID string, f *
 		}
 		return nil, newHTTPException(resp.StatusCode, code, message, "POST", path)
 	}
-	return nil, errors.New("upload: exhausted retries")
+	return nil, ErrUploadRetriesExhausted
 }

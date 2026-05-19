@@ -1,6 +1,29 @@
 package banter
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+const (
+	MsgDupSlashCommand   = "duplicate slash command %q — fix your command loader and restart"
+	MsgDupButtonHandler  = "duplicate button handler %q — fix your loader and restart"
+	MsgEmptyButtonID     = "OnButton: custom_id must be non-empty"
+	MsgCommandSyncDup    = "command sync rejected by server: duplicate name %q in registration payload. The server did NOT modify your previously-registered commands. Check your command loader for a duplicate entry, or rename one of the commands."
+)
+
+var (
+	ErrInteractionDetached    = errors.New("interaction has no attached client")
+	ErrInteractionHTTPMissing = errors.New("interaction has no attached HTTP client")
+	ErrInteractionResponded   = errors.New("interaction already responded to")
+	ErrRespondEmpty           = errors.New("respond requires non-empty content or an embed")
+	ErrFollowupEmpty          = errors.New("followup requires non-empty content or an embed")
+	ErrUpdateNotButton        = errors.New("update is only valid for button interactions — use Respond or Followup for slash commands")
+	ErrContextDetached        = errors.New("context detached from bot")
+	ErrFileNeedsFilename      = errors.New("file constructors require a filename")
+	ErrHTTPRetriesExhausted   = errors.New("http: exhausted retries without returning")
+	ErrUploadRetriesExhausted = errors.New("upload: exhausted retries")
+)
 
 type BanterError struct {
 	Msg string

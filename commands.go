@@ -2,7 +2,6 @@ package banter
 
 import (
 	"context"
-	"errors"
 	"strings"
 )
 
@@ -73,7 +72,7 @@ type Context struct {
 
 func (c *Context) Reply(ctx context.Context, content string) error {
 	if c.Bot == nil || c.Bot.http == nil {
-		return errors.New("context detached from bot")
+		return ErrContextDetached
 	}
 	_, err := c.Bot.http.SendMessage(ctx, c.Message.ChannelID, SendMessageBody{
 		Content: content,
@@ -84,7 +83,7 @@ func (c *Context) Reply(ctx context.Context, content string) error {
 
 func (c *Context) ReplyEmbed(ctx context.Context, embed *Embed) error {
 	if c.Bot == nil || c.Bot.http == nil {
-		return errors.New("context detached from bot")
+		return ErrContextDetached
 	}
 	body := SendMessageBody{
 		Content: "",

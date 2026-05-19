@@ -3,10 +3,8 @@ package banter
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -22,8 +20,7 @@ const (
 	opHello          = 10
 	opHeartbeatAck   = 11
 
-	closeInvalidSeq        = 4007
-	closeHeartbeatTimeout  = 4009
+	closeInvalidSeq = 4007
 )
 
 var gatewayLog = newLogger("gateway")
@@ -283,11 +280,4 @@ func (g *Gateway) Close() error {
 		return nil
 	}
 	return conn.Close()
-}
-
-func init() {
-	_ = closeInvalidSeq
-	_ = closeHeartbeatTimeout
-	_ = errors.New
-	_ = strings.TrimSpace
 }

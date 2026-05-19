@@ -205,7 +205,7 @@ func (b *Bot) SlashCommand(name, description string, options []SlashOption, hand
 	defer b.mu.Unlock()
 	if _, exists := b.slashHandlers[name]; exists {
 		b.mu.Unlock()
-		botLog.Panic("duplicate slash command %q — fix your command loader and restart", name)
+		botLog.Panic(MsgDupSlashCommand, name)
 	}
 	entry := map[string]any{
 		"name":        name,
@@ -227,7 +227,7 @@ func (b *Bot) SlashCommand(name, description string, options []SlashOption, hand
 
 func (b *Bot) OnButton(customID string, handler ButtonHandler) {
 	if customID == "" {
-		botLog.Panic("OnButton: custom_id must be non-empty")
+		botLog.Panic(MsgEmptyButtonID)
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -237,7 +237,7 @@ func (b *Bot) OnButton(customID string, handler ButtonHandler) {
 		return
 	}
 	if _, exists := b.buttonExact[customID]; exists {
-		botLog.Panic("duplicate button handler %q — fix your loader and restart", customID)
+		botLog.Panic(MsgDupButtonHandler, customID)
 	}
 	b.buttonExact[customID] = handler
 }
@@ -444,7 +444,7 @@ func (b *Bot) handleReady(ctx context.Context, payload json.RawMessage) {
 		if err := b.syncCommands(ctx); err != nil {
 			var dup *DuplicateCommand
 			if errors.As(err, &dup) {
-				botLog.Info("command sync rejected by server: duplicate name %q in registration payload. The server did NOT modify your previously-registered commands. Check your command loader for a duplicate entry, or rename one of the commands.", dup.Name)
+				botLog.Info(MsgCommandSyncDup, dup.Name)
 			} else {
 				botLog.Info("command sync failed: %s", err)
 			}
@@ -585,7 +585,7 @@ func (b *Bot) Run(ctx context.Context, token string) error {
 			return ctx.Err()
 		}
 
-		if b.gateway.InvalidSession() || code == 4007 {
+		if b.gateway.InvalidSession() || code == closeInvalidSeq {
 			b.SessionID = ""
 			resume = nil
 		} else if b.SessionID != "" && b.gateway.LastSeq() >= 0 {
