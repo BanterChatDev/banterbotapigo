@@ -26,11 +26,13 @@ const (
 var gatewayLog = NewLogger(loggerPrefix + "gateway")
 
 type gatewayFrame struct {
-	Op   int             `json:"op"`
-	D    json.RawMessage `json:"d,omitempty"`
-	S    *int            `json:"s,omitempty"`
-	T    string          `json:"t,omitempty"`
-	Type string          `json:"type,omitempty"`
+	Op      int             `json:"op"`
+	D       json.RawMessage `json:"d,omitempty"`
+	S       *int            `json:"s,omitempty"`
+	T       string          `json:"t,omitempty"`
+	Type    string          `json:"type,omitempty"`
+	Payload json.RawMessage `json:"payload,omitempty"`
+	HasOp   bool            `json:"-"`
 }
 
 type Dispatcher func(ctx context.Context, eventType string, payload json.RawMessage)
@@ -196,8 +198,12 @@ func (g *Gateway) Run(ctx context.Context) error {
 			gatewayLog.Info("gateway: dropping non-JSON frame: %s", err)
 			continue
 		}
+		var probe map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &probe); err == nil {
+			_, msg.HasOp = probe["op"]
+		}
 
-		if msg.Op == opHello {
+		if msg.HasOp && msg.Op == opHello {
 			var d struct {
 				HeartbeatInterval int `json:"heartbeat_interval"`
 			}
@@ -212,13 +218,13 @@ func (g *Gateway) Run(ctx context.Context) error {
 			g.mu.Unlock()
 			continue
 		}
-		if msg.Op == opHeartbeatAck {
+		if msg.HasOp && msg.Op == opHeartbeatAck {
 			g.mu.Lock()
 			g.lastAck = true
 			g.mu.Unlock()
 			continue
 		}
-		if msg.Op == opDispatch {
+		if msg.HasOp && msg.Op == opDispatch {
 			if msg.S != nil {
 				g.mu.Lock()
 				if *msg.S > g.lastSeq {
@@ -231,12 +237,15 @@ func (g *Gateway) Run(ctx context.Context) error {
 			if eventType == "" && msg.Type != "" {
 				eventType = msg.Type
 			}
+			if len(payload) == 0 {
+				payload = json.RawMessage("{}")
+			}
 			if g.dispatcher != nil {
 				g.dispatcher(ctx, eventType, payload)
 			}
 			continue
 		}
-		if msg.Op == opInvalidSession {
+		if msg.HasOp && msg.Op == opInvalidSession {
 			g.mu.Lock()
 			g.invalidSession = true
 			conn := g.conn
@@ -248,7 +257,7 @@ func (g *Gateway) Run(ctx context.Context) error {
 			}
 			return nil
 		}
-		if msg.Op == opReconnect {
+		if msg.HasOp && msg.Op == opReconnect {
 			g.mu.Lock()
 			conn := g.conn
 			g.mu.Unlock()
@@ -259,7 +268,18 @@ func (g *Gateway) Run(ctx context.Context) error {
 			}
 			return nil
 		}
-		gatewayLog.Debug("gateway: unknown op %d ignored", msg.Op)
+		if msg.HasOp {
+			gatewayLog.Debug("gateway: unknown op %d ignored", msg.Op)
+			continue
+		}
+		eventType := msg.Type
+		payload := msg.Payload
+		if len(payload) == 0 {
+			payload = json.RawMessage("{}")
+		}
+		if eventType != "" && g.dispatcher != nil {
+			g.dispatcher(ctx, eventType, payload)
+		}
 	}
 }
 
