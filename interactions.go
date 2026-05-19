@@ -227,7 +227,8 @@ func (i *Interaction) Update(ctx context.Context, content string, opts RespondOp
 }
 
 func (i *Interaction) dispatch(ctx context.Context, body map[string]any) error {
-	_ = ctx
-	_ = body
-	return errors.New("interaction.dispatch not wired: HTTP client not implemented yet (chunk 3)")
+	if i.client == nil || i.client.http == nil {
+		return errors.New("interaction has no attached HTTP client")
+	}
+	return i.client.http.RespondInteraction(ctx, i.ID, i.Token, body)
 }

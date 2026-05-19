@@ -1,6 +1,9 @@
 package banter
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+)
 
 type User struct {
 	ID          string `json:"id"`
@@ -111,4 +114,7 @@ type clientRef struct {
 	http httpDoer
 }
 
-type httpDoer interface{}
+type httpDoer interface {
+	Request(ctx context.Context, method, path string, body any, params map[string]string, extraHeaders map[string]string) ([]byte, error)
+	RespondInteraction(ctx context.Context, interactionID, token string, body map[string]any) error
+}
