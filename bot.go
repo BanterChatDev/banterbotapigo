@@ -489,6 +489,19 @@ func (b *Bot) handleMessageCreate(ctx context.Context, payload json.RawMessage) 
 	b.processPrefixCommand(ctx, &m)
 }
 
+func (b *Bot) autoErrorReply(ctx context.Context, in *Interaction) {
+	opts := RespondOpts{Ephemeral: true}
+	var err error
+	if in.IsButton() {
+		err = in.Update(ctx, MsgSlashHandlerFailed, opts)
+	} else {
+		err = in.Respond(ctx, MsgSlashHandlerFailed, opts)
+	}
+	if err != nil {
+		botLog.Debug("auto error reply failed: %s", err)
+	}
+}
+
 func (b *Bot) handleInteraction(ctx context.Context, payload json.RawMessage) {
 	in, err := newInteractionFromJSON(payload, b.cref)
 	if err != nil {
@@ -505,6 +518,7 @@ func (b *Bot) handleInteraction(ctx context.Context, payload json.RawMessage) {
 		}
 		b.fire("slash:"+in.CommandName, func() {
 			if err := h(ctx, in); err != nil {
+				b.autoErrorReply(ctx, in)
 				b.fireError(ctx, err)
 			}
 		})
@@ -518,6 +532,7 @@ func (b *Bot) handleInteraction(ctx context.Context, payload json.RawMessage) {
 		}
 		b.fire("button:"+in.CustomID, func() {
 			if err := h(ctx, in); err != nil {
+				b.autoErrorReply(ctx, in)
 				b.fireError(ctx, err)
 			}
 		})
@@ -730,4 +745,22 @@ func (b *Bot) GetGuild(ctx context.Context, guildID string) (*Guild, error) {
 	}
 	g.client = b.cref
 	return &g, nil
+}
+
+func (b *Bot) EveryoneRole(ctx context.Context, guildID string) (*Role, error) {
+	raw, err := b.HTTP.ListRoles(ctx, guildID)
+	if err != nil {
+		return nil, err
+	}
+	var roles []*Role
+	if err := json.Unmarshal(raw, &roles); err != nil {
+		return nil, err
+	}
+	for _, r := range roles {
+		if r.Name == "@everyone" {
+			r.client = b.cref
+			return r, nil
+		}
+	}
+	return nil, ErrEveryoneNotFound
 }

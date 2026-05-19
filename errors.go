@@ -6,10 +6,11 @@ import (
 )
 
 const (
-	MsgDupSlashCommand   = "duplicate slash command %q — fix your command loader and restart"
-	MsgDupButtonHandler  = "duplicate button handler %q — fix your loader and restart"
-	MsgEmptyButtonID     = "OnButton: custom_id must be non-empty"
-	MsgCommandSyncDup    = "command sync rejected by server: duplicate name %q in registration payload. The server did NOT modify your previously-registered commands. Check your command loader for a duplicate entry, or rename one of the commands."
+	MsgDupSlashCommand    = "duplicate slash command %q — fix your command loader and restart"
+	MsgDupButtonHandler   = "duplicate button handler %q — fix your loader and restart"
+	MsgEmptyButtonID      = "OnButton: custom_id must be non-empty"
+	MsgCommandSyncDup     = "command sync rejected by server: duplicate name %q in registration payload. The server did NOT modify your previously-registered commands. Check your command loader for a duplicate entry, or rename one of the commands."
+	MsgSlashHandlerFailed = "Command failed."
 )
 
 var (
@@ -23,6 +24,7 @@ var (
 	ErrFileNeedsFilename      = errors.New("file constructors require a filename")
 	ErrHTTPRetriesExhausted   = errors.New("http: exhausted retries without returning")
 	ErrUploadRetriesExhausted = errors.New("upload: exhausted retries")
+	ErrEveryoneNotFound       = errors.New("@everyone role not found in guild")
 )
 
 type BanterError struct {
