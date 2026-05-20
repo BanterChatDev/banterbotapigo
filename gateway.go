@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -103,6 +104,10 @@ func (g *Gateway) Connect(ctx context.Context) error {
 	}
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 30 * time.Second,
+		NetDialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
 	}
 	conn, resp, err := dialer.DialContext(ctx, u, hdr)
 	if err != nil {
@@ -146,9 +151,11 @@ func (g *Gateway) startHeartbeat() {
 				conn := g.conn
 				g.mu.Unlock()
 				if conn != nil {
+					_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 					_ = conn.WriteControl(websocket.CloseMessage,
 						websocket.FormatCloseMessage(4000, "missed heartbeat ack"),
 						time.Now().Add(time.Second))
+					_ = conn.Close()
 				}
 				return
 			}
@@ -162,13 +169,23 @@ func (g *Gateway) startHeartbeat() {
 			}
 			frame, _ := json.Marshal(map[string]any{"op": opHeartbeat, "d": payload})
 			if conn != nil {
+				_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 				if err := conn.WriteMessage(websocket.TextMessage, frame); err != nil {
 					gatewayLog.Info("heartbeat send failed: %s", err)
+					_ = conn.Close()
 					return
 				}
 			}
 		}
 	}
+}
+
+func (g *Gateway) readDeadline() time.Time {
+	interval := g.heartbeatInterval
+	if interval <= 0 {
+		interval = 41250
+	}
+	return time.Now().Add(time.Duration(interval)*time.Millisecond*2 + 10*time.Second)
 }
 
 func (g *Gateway) Run(ctx context.Context) error {
@@ -178,6 +195,8 @@ func (g *Gateway) Run(ctx context.Context) error {
 	if conn == nil {
 		return &GatewayError{BanterError: BanterError{Msg: "not connected"}}
 	}
+
+	_ = conn.SetReadDeadline(g.readDeadline())
 
 	go g.startHeartbeat()
 
@@ -192,6 +211,7 @@ func (g *Gateway) Run(ctx context.Context) error {
 			g.mu.Unlock()
 			return nil
 		}
+		_ = conn.SetReadDeadline(g.readDeadline())
 
 		var msg gatewayFrame
 		if err := json.Unmarshal(raw, &msg); err != nil {
