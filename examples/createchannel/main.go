@@ -33,7 +33,7 @@ func main() {
 				return i.Respond(ctx, "name cannot be empty.", banter.RespondOpts{Ephemeral: true})
 			}
 
-			ch, err := bot.CreateChannel(ctx, i.GuildID, name)
+			ch, err := bot.CreateChannel(ctx, i.GuildID, name, banter.ChannelOpts{})
 			if err != nil {
 				return i.Respond(ctx,
 					fmt.Sprintf("could not create channel: %s", err),

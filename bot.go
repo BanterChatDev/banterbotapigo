@@ -677,7 +677,11 @@ func min(a, b int) int {
 }
 
 func (b *Bot) SendMessage(ctx context.Context, channelID, content string) (*Message, error) {
-	body, err := b.HTTP.SendMessage(ctx, channelID, SendMessageBody{Content: content})
+	h, err := b.httpClient()
+	if err != nil {
+		return nil, err
+	}
+	body, err := h.SendMessage(ctx, channelID, SendMessageBody{Content: content})
 	if err != nil {
 		return nil, err
 	}
@@ -697,7 +701,11 @@ func (b *Bot) SendEmbed(ctx context.Context, channelID string, embed *Embed) (*M
 			body.Components = comps
 		}
 	}
-	raw, err := b.HTTP.SendMessage(ctx, channelID, body)
+h, err := b.httpClient()
+	if err != nil {
+		return nil, err
+	}
+	raw, err := h.SendMessage(ctx, channelID, body)
 	if err != nil {
 		return nil, err
 	}
@@ -709,8 +717,37 @@ func (b *Bot) SendEmbed(ctx context.Context, channelID string, embed *Embed) (*M
 	return &m, nil
 }
 
-func (b *Bot) CreateChannel(ctx context.Context, guildID, name string) (*Channel, error) {
-	raw, err := b.HTTP.CreateChannel(ctx, guildID, CreateChannelBody{Name: name, Type: "text"})
+
+const (
+	ChannelTypeText  = "text"
+	ChannelTypeVoice = "voice"
+)
+
+type ChannelOpts struct {
+	CategoryID string
+	Type       string
+}
+
+func (b *Bot) httpClient() (*HTTPClient, error) {
+	if b.HTTP == nil {
+		return nil, errors.New("banter: bot not running; call HTTP methods from handlers (e.g. OnReady) or after Run starts")
+	}
+	return b.HTTP, nil
+}
+
+func (b *Bot) CreateChannel(ctx context.Context, guildID, name string, opts ChannelOpts) (*Channel, error) {
+	h, err := b.httpClient()
+	if err != nil {
+		return nil, err
+	}
+	if opts.Type == "" {
+		opts.Type = ChannelTypeText
+	}
+	raw, err := h.CreateChannel(ctx, guildID, CreateChannelBody{
+		Name:       name,
+		Type:       opts.Type,
+		CategoryID: opts.CategoryID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -723,7 +760,11 @@ func (b *Bot) CreateChannel(ctx context.Context, guildID, name string) (*Channel
 }
 
 func (b *Bot) CreateCategory(ctx context.Context, guildID, name string) (*Category, error) {
-	raw, err := b.HTTP.CreateCategory(ctx, guildID, CreateCategoryBody{Name: name})
+	h, err := b.httpClient()
+	if err != nil {
+		return nil, err
+	}
+	raw, err := h.CreateCategory(ctx, guildID, CreateCategoryBody{Name: name})
 	if err != nil {
 		return nil, err
 	}
@@ -735,8 +776,44 @@ func (b *Bot) CreateCategory(ctx context.Context, guildID, name string) (*Catego
 	return &cat, nil
 }
 
+func (b *Bot) ListCategories(ctx context.Context, guildID string) ([]*Category, error) {
+	h, err := b.httpClient()
+	if err != nil {
+		return nil, err
+	}
+	raw, err := h.ListCategories(ctx, guildID)
+	if err != nil {
+		return nil, err
+	}
+	var cats []*Category
+	if err := json.Unmarshal(raw, &cats); err != nil {
+		return nil, err
+	}
+	for _, cat := range cats {
+		cat.client = b.cref
+	}
+	return cats, nil
+}
+
+func (b *Bot) EnsureCategory(ctx context.Context, guildID, name string) (*Category, error) {
+	cats, err := b.ListCategories(ctx, guildID)
+	if err != nil {
+		return nil, err
+	}
+	for _, cat := range cats {
+		if cat.Name == name {
+			return cat, nil
+		}
+	}
+	return b.CreateCategory(ctx, guildID, name)
+}
+
 func (b *Bot) ListChannels(ctx context.Context, guildID string) ([]*Channel, error) {
-	raw, err := b.HTTP.ListChannels(ctx, guildID)
+	h, err := b.httpClient()
+	if err != nil {
+		return nil, err
+	}
+	raw, err := h.ListChannels(ctx, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -750,8 +827,25 @@ func (b *Bot) ListChannels(ctx context.Context, guildID string) ([]*Channel, err
 	return chs, nil
 }
 
+func (b *Bot) EnsureChannel(ctx context.Context, guildID, name string, opts ChannelOpts) (*Channel, error) {
+	chs, err := b.ListChannels(ctx, guildID)
+	if err != nil {
+		return nil, err
+	}
+	for _, ch := range chs {
+		if ch.Name == name && ch.CategoryID == opts.CategoryID {
+			return ch, nil
+		}
+	}
+	return b.CreateChannel(ctx, guildID, name, opts)
+}
+
 func (b *Bot) GetChannel(ctx context.Context, channelID string) (*Channel, error) {
-	raw, err := b.HTTP.GetChannel(ctx, channelID)
+	h, err := b.httpClient()
+	if err != nil {
+		return nil, err
+	}
+	raw, err := h.GetChannel(ctx, channelID)
 	if err != nil {
 		return nil, err
 	}
@@ -764,7 +858,11 @@ func (b *Bot) GetChannel(ctx context.Context, channelID string) (*Channel, error
 }
 
 func (b *Bot) GetGuild(ctx context.Context, guildID string) (*Guild, error) {
-	raw, err := b.HTTP.GetGuild(ctx, guildID)
+	h, err := b.httpClient()
+	if err != nil {
+		return nil, err
+	}
+	raw, err := h.GetGuild(ctx, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -777,7 +875,11 @@ func (b *Bot) GetGuild(ctx context.Context, guildID string) (*Guild, error) {
 }
 
 func (b *Bot) EveryoneRole(ctx context.Context, guildID string) (*Role, error) {
-	raw, err := b.HTTP.ListRoles(ctx, guildID)
+	h, err := b.httpClient()
+	if err != nil {
+		return nil, err
+	}
+	raw, err := h.ListRoles(ctx, guildID)
 	if err != nil {
 		return nil, err
 	}
