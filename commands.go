@@ -99,6 +99,17 @@ func (c *Context) ReplyEmbed(ctx context.Context, embed *Embed) error {
 	return err
 }
 
+func (c *Context) ReplyFile(ctx context.Context, file *File, content string) error {
+	if c.Bot == nil {
+		return ErrContextDetached
+	}
+	_, err := c.Bot.SendFile(ctx, c.Message.ChannelID, file, SendFileOpts{
+		Content: content,
+		ReplyTo: c.Message.ID,
+	})
+	return err
+}
+
 type PrefixHandler func(ctx context.Context, c *Context) error
 
 type prefixCommand struct {

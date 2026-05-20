@@ -735,6 +735,61 @@ func (b *Bot) httpClient() (*HTTPClient, error) {
 	return b.HTTP, nil
 }
 
+type SendFileOpts struct {
+	Content string
+	ReplyTo string
+}
+
+func (b *Bot) DownloadAttachment(ctx context.Context, att *Attachment) (*File, error) {
+	h, err := b.httpClient()
+	if err != nil {
+		return nil, err
+	}
+	if att == nil {
+		return nil, errors.New("banter: DownloadAttachment called with nil attachment")
+	}
+	data, err := h.DownloadAttachment(ctx, att.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &File{Data: data, Filename: att.Filename}, nil
+}
+
+func (b *Bot) SendFile(ctx context.Context, channelID string, file *File, opts SendFileOpts) (*Message, error) {
+	h, err := b.httpClient()
+	if err != nil {
+		return nil, err
+	}
+	if file == nil {
+		return nil, errors.New("banter: SendFile called with nil file")
+	}
+	raw, err := h.UploadAttachment(ctx, channelID, file)
+	if err != nil {
+		return nil, err
+	}
+	var att struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &att); err != nil {
+		return nil, err
+	}
+	body := SendMessageBody{
+		Content:       opts.Content,
+		ReplyTo:       opts.ReplyTo,
+		AttachmentIDs: []string{att.ID},
+	}
+	out, err := h.SendMessage(ctx, channelID, body)
+	if err != nil {
+		return nil, err
+	}
+	var m Message
+	if err := json.Unmarshal(out, &m); err != nil {
+		return nil, err
+	}
+	m.client = b.cref
+	return &m, nil
+}
+
 func (b *Bot) CreateChannel(ctx context.Context, guildID, name string, opts ChannelOpts) (*Channel, error) {
 	h, err := b.httpClient()
 	if err != nil {
