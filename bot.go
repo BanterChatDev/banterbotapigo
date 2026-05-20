@@ -790,6 +790,15 @@ func (b *Bot) SendFile(ctx context.Context, channelID string, file *File, opts S
 	return &m, nil
 }
 
+func (b *Bot) DeleteChannel(ctx context.Context, channelID string) error {
+	h, err := b.httpClient()
+	if err != nil {
+		return err
+	}
+	_, err = h.DeleteChannel(ctx, channelID)
+	return err
+}
+
 func (b *Bot) CreateChannel(ctx context.Context, guildID, name string, opts ChannelOpts) (*Channel, error) {
 	h, err := b.httpClient()
 	if err != nil {
@@ -812,6 +821,15 @@ func (b *Bot) CreateChannel(ctx context.Context, guildID, name string, opts Chan
 	}
 	ch.client = b.cref
 	return &ch, nil
+}
+
+func (b *Bot) DeleteCategory(ctx context.Context, categoryID string) error {
+	h, err := b.httpClient()
+	if err != nil {
+		return err
+	}
+	_, err = h.DeleteCategory(ctx, categoryID)
+	return err
 }
 
 func (b *Bot) CreateCategory(ctx context.Context, guildID, name string) (*Category, error) {
