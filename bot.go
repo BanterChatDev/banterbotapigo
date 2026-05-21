@@ -613,11 +613,13 @@ func (b *Bot) Run(ctx context.Context, token string) error {
 		}
 		code, reason := b.gateway.CloseInfo()
 		switch code {
-		case 4001, 4004, 4010:
-			label := map[int]string{4001: "BANNED", 4004: "INVALID TOKEN", 4010: "PROTOCOL VIOLATION"}[code]
+		case 4001, 4004:
+			label := map[int]string{4001: "BANNED", 4004: "INVALID TOKEN"}[code]
 			botLog.Info("DISCONNECTED code=%d (%s) reason=%s — not reconnecting", code, label, reason)
 			_ = b.gateway.Close()
 			return nil
+		case 4010:
+			botLog.Info("DISCONNECTED code=4010 (PROTOCOL VIOLATION) reason=%s — will retry", reason)
 		}
 
 		if !b.reconnect {
