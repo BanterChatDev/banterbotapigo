@@ -344,6 +344,7 @@ func (b *Bot) processPrefixCommand(ctx context.Context, m *Message) {
 	}
 	b.mu.RUnlock()
 	if !ok || cmd == nil {
+		b.fireError(ctx, newCommandNotFound(name, m))
 		return
 	}
 	c := &Context{

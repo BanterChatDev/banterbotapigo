@@ -51,7 +51,20 @@ type CommandError struct{ Msg string }
 
 func (e *CommandError) Error() string { return e.Msg }
 
-type CommandNotFound struct{ CommandError }
+type CommandNotFound struct {
+	CommandError
+	Name    string
+	Message *Message
+}
+
+func newCommandNotFound(name string, m *Message) *CommandNotFound {
+	return &CommandNotFound{
+		CommandError: CommandError{Msg: "prefix command not found: " + name},
+		Name:         name,
+		Message:      m,
+	}
+}
+
 type MissingArgument struct {
 	CommandError
 	Name string
@@ -61,6 +74,26 @@ type BadArgument struct {
 	Name     string
 	Value    string
 	Expected string
+}
+
+const notFoundEmbedColor = 0xED4245
+
+func DefaultNotFoundEmbed(name, prefix string) *Embed {
+	return NewEmbed().
+		Title("Command not found").
+		Description("`" + prefix + name + "`").
+		ColorInt(notFoundEmbedColor)
+}
+
+func (b *Bot) AutoNotFoundReply() {
+	b.OnError(func(ctx context.Context, err error) {
+		cnf, ok := err.(*CommandNotFound)
+		if !ok || cnf.Message == nil {
+			return
+		}
+		embed := DefaultNotFoundEmbed(cnf.Name, b.commandPrefix)
+		_, _ = b.SendEmbed(ctx, cnf.Message.ChannelID, embed)
+	})
 }
 
 type Context struct {
