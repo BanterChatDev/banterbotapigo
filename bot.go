@@ -805,8 +805,9 @@ func (b *Bot) httpClient() (*HTTPClient, error) {
 }
 
 type SendFileOpts struct {
-	Content string	
+	Content string
 	ReplyTo string
+	Embed   *Embed
 }
 
 func (b *Bot) DownloadAttachment(ctx context.Context, att *Attachment) (*File, error) {
@@ -846,6 +847,12 @@ func (b *Bot) SendFile(ctx context.Context, channelID string, file *File, opts S
 		Content:       opts.Content,
 		ReplyTo:       opts.ReplyTo,
 		AttachmentIDs: []string{att.ID},
+	}
+	if opts.Embed != nil {
+		body.Embed = opts.Embed.ToDict()
+		if comps := opts.Embed.PendingComponents(); comps != nil {
+			body.Components = comps
+		}
 	}
 	out, err := h.SendMessage(ctx, channelID, body)
 	if err != nil {
