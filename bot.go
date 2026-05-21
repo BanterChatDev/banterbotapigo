@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"math/rand"
+	"os"
+	"os/signal"
 	"runtime/debug"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -582,7 +585,22 @@ func (b *Bot) Run(ctx context.Context, token string) error {
 	b.cref = &clientRef{http: b.HTTP}
 	b.done = make(chan struct{})
 
-	go b.supervise(ctx, token)
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigs)
+
+	go b.supervise(runCtx, token)
+
+	select {
+	case <-sigs:
+		botLog.Info("shutdown signal received")
+		cancel()
+		<-b.done
+	case <-b.done:
+	}
 	return nil
 }
 
