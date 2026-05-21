@@ -46,13 +46,12 @@ type Gateway struct {
 	resumeSID  string
 	resumeSeq  int
 
-	mu                sync.Mutex
-	conn              *websocket.Conn
-	closed            bool
-	heartbeatInterval int
-	lastAck           bool
-	missedAcks        int
-	lastSeq           int
+	mu       sync.Mutex
+	conn     *websocket.Conn
+	closed   bool
+	lastAck  bool
+	lastRecv time.Time
+	lastSeq  int
 	invalidSession    bool
 	closeCode         int
 	closeReason       string
@@ -60,7 +59,11 @@ type Gateway struct {
 	heartbeatStop chan struct{}
 }
 
-const maxMissedAcks = 3
+const (
+	heartbeatInterval = 10 * time.Second
+	heartbeatTimeout  = 25 * time.Second
+	ackTimeout        = 15 * time.Second
+)
 
 func NewGateway(token string, intents int64, wsURL string, dispatcher Dispatcher) *Gateway {
 	return &Gateway{
@@ -109,7 +112,13 @@ func (g *Gateway) Connect(ctx context.Context) error {
 		HandshakeTimeout: 30 * time.Second,
 		NetDialContext: (&net.Dialer{
 			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
+			KeepAlive: 10 * time.Second,
+			KeepAliveConfig: net.KeepAliveConfig{
+				Enable:   true,
+				Idle:     10 * time.Second,
+				Interval: 3 * time.Second,
+				Count:    3,
+			},
 		}).DialContext,
 	}
 	conn, resp, err := dialer.DialContext(ctx, u, hdr)
@@ -136,13 +145,11 @@ func (g *Gateway) Connect(ctx context.Context) error {
 
 func (g *Gateway) startHeartbeat() {
 	g.mu.Lock()
-	interval := g.heartbeatInterval
 	stop := g.heartbeatStop
+	g.lastRecv = time.Now()
 	g.mu.Unlock()
-	if interval <= 0 {
-		interval = 41250
-	}
-	ticker := time.NewTicker(time.Duration(interval) * time.Millisecond)
+
+	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -150,29 +157,27 @@ func (g *Gateway) startHeartbeat() {
 			return
 		case <-ticker.C:
 			g.mu.Lock()
-			if !g.lastAck {
-				g.missedAcks++
-				if g.missedAcks >= maxMissedAcks {
-					conn := g.conn
-					g.mu.Unlock()
-					gatewayLog.Info("gateway: %d consecutive missed heartbeat acks, closing", g.missedAcks)
-					if conn != nil {
-						_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-						_ = conn.WriteControl(websocket.CloseMessage,
-							websocket.FormatCloseMessage(4000, "missed heartbeat ack"),
-							time.Now().Add(time.Second))
-						_ = conn.Close()
-					}
-					return
-				}
-				gatewayLog.Info("gateway: missed heartbeat ack %d/%d, continuing", g.missedAcks, maxMissedAcks)
-			} else {
-				g.missedAcks = 0
-			}
-			g.lastAck = false
-			seq := g.lastSeq
+			silentFor := time.Since(g.lastRecv)
+			ackPending := !g.lastAck
 			conn := g.conn
+			seq := g.lastSeq
 			g.mu.Unlock()
+
+			if silentFor > heartbeatTimeout {
+				gatewayLog.Info("gateway: no frames for %s, closing zombie connection", silentFor)
+				g.forceClose(conn, "zombie connection")
+				return
+			}
+			if ackPending && silentFor > ackTimeout {
+				gatewayLog.Info("gateway: no heartbeat ack for %s, closing", silentFor)
+				g.forceClose(conn, "missed heartbeat ack")
+				return
+			}
+
+			g.mu.Lock()
+			g.lastAck = false
+			g.mu.Unlock()
+
 			var payload any
 			if seq >= 0 {
 				payload = seq
@@ -190,12 +195,19 @@ func (g *Gateway) startHeartbeat() {
 	}
 }
 
-func (g *Gateway) readDeadline() time.Time {
-	interval := g.heartbeatInterval
-	if interval <= 0 {
-		interval = 41250
+func (g *Gateway) forceClose(conn *websocket.Conn, reason string) {
+	if conn == nil {
+		return
 	}
-	return time.Now().Add(time.Duration(interval)*time.Millisecond*2 + 10*time.Second)
+	_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	_ = conn.WriteControl(websocket.CloseMessage,
+		websocket.FormatCloseMessage(4000, reason),
+		time.Now().Add(time.Second))
+	_ = conn.Close()
+}
+
+func (g *Gateway) readDeadline() time.Time {
+	return time.Now().Add(heartbeatTimeout + 5*time.Second)
 }
 
 func (g *Gateway) Run(ctx context.Context) error {
@@ -221,6 +233,9 @@ func (g *Gateway) Run(ctx context.Context) error {
 			g.mu.Unlock()
 			return nil
 		}
+		g.mu.Lock()
+		g.lastRecv = time.Now()
+		g.mu.Unlock()
 		_ = conn.SetReadDeadline(g.readDeadline())
 
 		var msg gatewayFrame
@@ -234,16 +249,7 @@ func (g *Gateway) Run(ctx context.Context) error {
 		}
 
 		if msg.HasOp && msg.Op == opHello {
-			var d struct {
-				HeartbeatInterval int `json:"heartbeat_interval"`
-			}
-			_ = json.Unmarshal(msg.D, &d)
-			interval := d.HeartbeatInterval
-			if interval <= 0 {
-				interval = 41250
-			}
 			g.mu.Lock()
-			g.heartbeatInterval = interval
 			g.lastAck = true
 			g.mu.Unlock()
 			continue
@@ -251,7 +257,6 @@ func (g *Gateway) Run(ctx context.Context) error {
 		if msg.HasOp && msg.Op == opHeartbeatAck {
 			g.mu.Lock()
 			g.lastAck = true
-			g.missedAcks = 0
 			g.mu.Unlock()
 			continue
 		}
