@@ -11,6 +11,6 @@ const (
 
 const (
 	botBase        = "/api/v1/bot"
-	maxAttempts    = 2
+	maxAttempts    = 5
 	loggerPrefix   = "banterapi."
 )

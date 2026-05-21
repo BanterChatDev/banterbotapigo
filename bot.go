@@ -17,15 +17,15 @@ import (
 var botLog = NewLogger(loggerPrefix + "bot")
 
 type BotOpts struct {
-	Intents         int64
-	BaseURL         string
-	WSURL           string
-	Reconnect       bool
-	CommandPrefix   string
-	ApplicationID   string
-	HelpCommand     *HelpCommand
-	HelpColor       int
-	Debug           bool
+	Intents          int64
+	BaseURL          string
+	WSURL            string
+	DisableReconnect bool
+	CommandPrefix    string
+	ApplicationID    string
+	HelpCommand      *HelpCommand
+	HelpColor        int
+	Debug            bool
 }
 
 type HelpCommand struct {
@@ -125,7 +125,6 @@ func NewBot(opts BotOpts) *Bot {
 		intents:        opts.Intents,
 		baseURL:        opts.BaseURL,
 		wsURL:          opts.WSURL,
-		reconnect:      opts.Reconnect,
 		commandPrefix:  opts.CommandPrefix,
 		applicationID:  opts.ApplicationID,
 		helpColor:      opts.HelpColor,
@@ -139,11 +138,7 @@ func NewBot(opts BotOpts) *Bot {
 	if opts.Debug {
 		setLogLevel(logDebug)
 	}
-	if opts.Reconnect == false {
-		b.reconnect = false
-	} else {
-		b.reconnect = true
-	}
+	b.reconnect = !opts.DisableReconnect
 	switch {
 	case opts.HelpCommand == nil:
 		registerHelp(b)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -76,6 +77,19 @@ func (h *HTTPClient) Request(ctx context.Context, method, path string, body any,
 		httpLog.Debug("HTTP %s %s attempt=%d", method, full, attempt)
 		resp, err := h.client.Do(req)
 		if err != nil {
+			// Network-level failure (connection refused, TLS reset, timeout,
+			// DNS hiccup, etc). These are almost always transient; bailing
+			// after one try means a single packet loss kills the request.
+			if attempt < maxAttempts-1 && ctx.Err() == nil {
+				httpLog.Info("HTTP %s %s network error attempt=%d: %s — retrying", method, full, attempt, err)
+				if sleepErr := sleepOrCancel(ctx, backoffSeconds(attempt)); sleepErr != nil {
+					return nil, sleepErr
+				}
+				if bodyReader != nil {
+					bodyReader = bytes.NewReader(mustMarshal(body))
+				}
+				continue
+			}
 			return nil, err
 		}
 		respBody, _ := io.ReadAll(resp.Body)
@@ -107,6 +121,22 @@ func (h *HTTPClient) Request(ctx context.Context, method, path string, body any,
 			httpExc := newHTTPException(resp.StatusCode, code, message, method, path)
 			return nil, &RateLimited{HTTPException: *httpExc, RetryAfter: retryAfter}
 		}
+		if isTransientStatus(resp.StatusCode) && attempt < maxAttempts-1 {
+			// 408, 500, 502, 503, 504 — server-side blips. Server can hint
+			// Retry-After; otherwise jittered exponential.
+			delay := parseRetryAfter(resp.Header.Get("Retry-After"))
+			if delay <= 0 {
+				delay = backoffSeconds(attempt)
+			}
+			httpLog.Info("HTTP %s %s -> %d transient, retrying in %.2fs (attempt %d)", method, full, resp.StatusCode, delay, attempt)
+			if sleepErr := sleepOrCancel(ctx, delay); sleepErr != nil {
+				return nil, sleepErr
+			}
+			if bodyReader != nil {
+				bodyReader = bytes.NewReader(mustMarshal(body))
+			}
+			continue
+		}
 		if resp.StatusCode == http.StatusUnauthorized {
 			return nil, &LoginFailure{BanterError: BanterError{Msg: message}}
 		}
@@ -129,6 +159,29 @@ func (h *HTTPClient) Request(ctx context.Context, method, path string, body any,
 		return nil, newHTTPException(resp.StatusCode, code, message, method, path)
 	}
 	return nil, ErrHTTPRetriesExhausted
+}
+
+// isTransientStatus returns true for HTTP statuses that warrant a retry —
+// gateway/upstream blips and request-timeouts. Deterministic 4xx (401/403/
+// 404/validation) and 501 are excluded; retrying won't change the answer.
+func isTransientStatus(code int) bool {
+	switch code {
+	case 408, 500, 502, 503, 504:
+		return true
+	}
+	return false
+}
+
+// backoffSeconds gives the seconds to wait before attempt N (0-indexed) using
+// jittered exponential: 0.25 · 2^attempt, capped at 8s, ±25% jitter to avoid
+// thundering herd if many bots reconnect against the same outage.
+func backoffSeconds(attempt int) float64 {
+	base := 0.25 * float64(int(1)<<attempt)
+	if base > 8 {
+		base = 8
+	}
+	jitter := 0.75 + rand.Float64()*0.5
+	return base * jitter
 }
 
 func parseErrorBody(body []byte) (int, string) {
@@ -471,6 +524,13 @@ func (h *HTTPClient) UploadAttachment(ctx context.Context, channelID string, f *
 		req.Header.Set("Content-Type", w.FormDataContentType())
 		resp, err := h.client.Do(req)
 		if err != nil {
+			if attempt < maxAttempts-1 && ctx.Err() == nil {
+				httpLog.Info("upload network error attempt=%d: %s — retrying", attempt, err)
+				if sleepErr := sleepOrCancel(ctx, backoffSeconds(attempt)); sleepErr != nil {
+					return nil, sleepErr
+				}
+				continue
+			}
 			return nil, err
 		}
 		body, _ := io.ReadAll(resp.Body)
@@ -492,6 +552,17 @@ func (h *HTTPClient) UploadAttachment(ctx context.Context, channelID string, f *
 			}
 			httpExc := newHTTPException(resp.StatusCode, code, message, "POST", path)
 			return nil, &RateLimited{HTTPException: *httpExc, RetryAfter: retryAfter}
+		}
+		if isTransientStatus(resp.StatusCode) && attempt < maxAttempts-1 {
+			delay := parseRetryAfter(resp.Header.Get("Retry-After"))
+			if delay <= 0 {
+				delay = backoffSeconds(attempt)
+			}
+			httpLog.Info("upload -> %d transient, retrying in %.2fs (attempt %d)", resp.StatusCode, delay, attempt)
+			if sleepErr := sleepOrCancel(ctx, delay); sleepErr != nil {
+				return nil, sleepErr
+			}
+			continue
 		}
 		if resp.StatusCode == http.StatusUnauthorized {
 			return nil, &LoginFailure{BanterError: BanterError{Msg: message}}
