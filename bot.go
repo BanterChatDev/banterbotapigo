@@ -579,7 +579,7 @@ func (b *Bot) handleInteraction(ctx context.Context, payload json.RawMessage) {
 
 func (b *Bot) Run(ctx context.Context, token string) error {
 	if b.done != nil {
-		return errors.New("banter: bot already running")
+		return ErrBotAlreadyRunning
 	}
 	b.HTTP = NewHTTPClient(token, b.baseURL)
 	b.cref = &clientRef{http: b.HTTP}
@@ -798,13 +798,13 @@ type ChannelOpts struct {
 
 func (b *Bot) httpClient() (*HTTPClient, error) {
 	if b.HTTP == nil {
-		return nil, errors.New("banter: bot not running; call HTTP methods from handlers (e.g. OnReady) or after Run starts")
+		return nil, ErrBotNotRunning
 	}
 	return b.HTTP, nil
 }
 
 type SendFileOpts struct {
-	Content string
+	Content string	
 	ReplyTo string
 }
 
@@ -814,7 +814,7 @@ func (b *Bot) DownloadAttachment(ctx context.Context, att *Attachment) (*File, e
 		return nil, err
 	}
 	if att == nil {
-		return nil, errors.New("banter: DownloadAttachment called with nil attachment")
+		return nil, ErrDownloadNilAttachment
 	}
 	data, err := h.DownloadAttachment(ctx, att.ID)
 	if err != nil {
@@ -829,7 +829,7 @@ func (b *Bot) SendFile(ctx context.Context, channelID string, file *File, opts S
 		return nil, err
 	}
 	if file == nil {
-		return nil, errors.New("banter: SendFile called with nil file")
+		return nil, ErrSendFileNilFile
 	}
 	raw, err := h.UploadAttachment(ctx, channelID, file)
 	if err != nil {

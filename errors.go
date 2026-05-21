@@ -16,6 +16,10 @@ const (
 
 var (
 	ErrInteractionDetached    = errors.New("interaction has no attached client")
+	ErrBotAlreadyRunning      = errors.New("banter: bot already running")
+	ErrBotNotRunning          = errors.New("banter: bot not running; call HTTP methods from handlers (e.g. OnReady) or after Run starts")
+	ErrDownloadNilAttachment  = errors.New("banter: DownloadAttachment called with nil attachment")
+	ErrSendFileNilFile        = errors.New("banter: SendFile called with nil file")
 	ErrInteractionHTTPMissing = errors.New("interaction has no attached HTTP client")
 	ErrInteractionResponded   = errors.New("interaction already responded to")
 	ErrRespondEmpty           = errors.New("respond requires non-empty content or an embed")
