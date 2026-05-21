@@ -51,6 +51,7 @@ type Gateway struct {
 	closed            bool
 	heartbeatInterval int
 	lastAck           bool
+	missedAcks        int
 	lastSeq           int
 	invalidSession    bool
 	closeCode         int
@@ -58,6 +59,8 @@ type Gateway struct {
 
 	heartbeatStop chan struct{}
 }
+
+const maxMissedAcks = 3
 
 func NewGateway(token string, intents int64, wsURL string, dispatcher Dispatcher) *Gateway {
 	return &Gateway{
@@ -148,16 +151,23 @@ func (g *Gateway) startHeartbeat() {
 		case <-ticker.C:
 			g.mu.Lock()
 			if !g.lastAck {
-				conn := g.conn
-				g.mu.Unlock()
-				if conn != nil {
-					_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-					_ = conn.WriteControl(websocket.CloseMessage,
-						websocket.FormatCloseMessage(4000, "missed heartbeat ack"),
-						time.Now().Add(time.Second))
-					_ = conn.Close()
+				g.missedAcks++
+				if g.missedAcks >= maxMissedAcks {
+					conn := g.conn
+					g.mu.Unlock()
+					gatewayLog.Info("gateway: %d consecutive missed heartbeat acks, closing", g.missedAcks)
+					if conn != nil {
+						_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+						_ = conn.WriteControl(websocket.CloseMessage,
+							websocket.FormatCloseMessage(4000, "missed heartbeat ack"),
+							time.Now().Add(time.Second))
+						_ = conn.Close()
+					}
+					return
 				}
-				return
+				gatewayLog.Info("gateway: missed heartbeat ack %d/%d, continuing", g.missedAcks, maxMissedAcks)
+			} else {
+				g.missedAcks = 0
 			}
 			g.lastAck = false
 			seq := g.lastSeq
@@ -241,6 +251,7 @@ func (g *Gateway) Run(ctx context.Context) error {
 		if msg.HasOp && msg.Op == opHeartbeatAck {
 			g.mu.Lock()
 			g.lastAck = true
+			g.missedAcks = 0
 			g.mu.Unlock()
 			continue
 		}

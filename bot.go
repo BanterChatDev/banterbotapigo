@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math/rand"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -85,6 +86,9 @@ type Bot struct {
 	slashHandlers     map[string]SlashHandler
 	buttonExact       map[string]ButtonHandler
 	buttonPrefix      []buttonPrefixEntry
+
+	done     chan struct{}
+	terminal bool
 }
 
 type buttonPrefixEntry struct {
@@ -571,10 +575,52 @@ func (b *Bot) handleInteraction(ctx context.Context, payload json.RawMessage) {
 }
 
 func (b *Bot) Run(ctx context.Context, token string) error {
+	if b.done != nil {
+		return errors.New("banter: bot already running")
+	}
 	b.HTTP = NewHTTPClient(token, b.baseURL)
 	b.cref = &clientRef{http: b.HTTP}
+	b.done = make(chan struct{})
+
+	go b.supervise(ctx, token)
+	return nil
+}
+
+func (b *Bot) Done() <-chan struct{} {
+	return b.done
+}
+
+func (b *Bot) supervise(ctx context.Context, token string) {
+	defer close(b.done)
 	defer b.HTTP.Close()
 
+	for {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					botLog.Error("supervisor: gateway loop panic: %v\n%s", r, debug.Stack())
+				}
+			}()
+			b.gatewayLoop(ctx, token)
+		}()
+
+		if ctx.Err() != nil {
+			return
+		}
+		if b.terminal {
+			return
+		}
+
+		botLog.Info("supervisor: gateway loop returned, restarting in 5s")
+		select {
+		case <-time.After(5 * time.Second):
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (b *Bot) gatewayLoop(ctx context.Context, token string) {
 	attempts := 0
 	var resume *resumeState
 
@@ -591,7 +637,8 @@ func (b *Bot) Run(ctx context.Context, token string) error {
 			var lf *LoginFailure
 			if errors.As(err, &lf) {
 				botLog.Info("LOGIN FAILED: %s — check your bot token", err)
-				return err
+				b.terminal = true
+				return
 			}
 			var ge *GatewayError
 			if errors.As(err, &ge) {
@@ -617,18 +664,19 @@ func (b *Bot) Run(ctx context.Context, token string) error {
 			label := map[int]string{4001: "BANNED", 4004: "INVALID TOKEN"}[code]
 			botLog.Info("DISCONNECTED code=%d (%s) reason=%s — not reconnecting", code, label, reason)
 			_ = b.gateway.Close()
-			return nil
+			b.terminal = true
+			return
 		case 4010:
 			botLog.Info("DISCONNECTED code=4010 (PROTOCOL VIOLATION) reason=%s — will retry", reason)
 		}
 
 		if !b.reconnect {
 			_ = b.gateway.Close()
-			return nil
+			return
 		}
 		if ctx.Err() != nil {
 			_ = b.gateway.Close()
-			return ctx.Err()
+			return
 		}
 
 		if b.gateway.InvalidSession() || code == closeInvalidSeq {
@@ -661,7 +709,7 @@ func (b *Bot) Run(ctx context.Context, token string) error {
 		case <-t.C:
 		case <-ctx.Done():
 			t.Stop()
-			return ctx.Err()
+			return
 		}
 	}
 }
