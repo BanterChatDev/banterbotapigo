@@ -109,9 +109,9 @@ func (g *Gateway) Connect(ctx context.Context) error {
 		"User-Agent":    []string{userAgent()},
 	}
 	dialer := &websocket.Dialer{
-		HandshakeTimeout: 30 * time.Second,
+		HandshakeTimeout: 8 * time.Second,
 		NetDialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
+			Timeout:   8 * time.Second,
 			KeepAlive: 10 * time.Second,
 			KeepAliveConfig: net.KeepAliveConfig{
 				Enable:   true,
